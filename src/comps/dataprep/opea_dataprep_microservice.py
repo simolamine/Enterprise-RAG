@@ -69,7 +69,7 @@ async def process(input: DataPrepInput) -> TextDocList:
 
     textdocs = None
     try:
-        textdocs = await dataprep.dataprep(files=decoded_files, link_list=link_list)
+        textdocs = await dataprep.dataprep(files=decoded_files, link_list=link_list, doc_metadata=input.doc_metadata)
     except ValueError as e:
         logger.exception(e)
         raise HTTPException(status_code=400, detail=f"An internal error occurred while processing: {str(e)}")

@@ -4,15 +4,16 @@
 import os
 import re
 import time
+import hashlib
 import unicodedata
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 import uuid
 from comps.cores.mega.logger import get_opea_logger
 from comps.cores.utils.utils import sanitize_env
 from comps.dataprep.utils.splitter import Splitter
 from fastapi import UploadFile
-from comps.cores.proto.docarray import TextDoc
+from comps.cores.proto.docarray import TextDoc, DocMetadata
 from comps.dataprep.utils.crawler import Crawler
 
 logger = get_opea_logger(f"{__file__.split('comps/')[1].split('/', 1)[0]}_microservice")
@@ -63,7 +64,7 @@ async def save_link_to_local_disk(link_list: List[str]) -> List[str]:
     return save_paths
 
 
-async def parse_files(files: List[UploadFile], splitter: Splitter) -> List[TextDoc]:
+async def parse_files(files: List[UploadFile], splitter: Splitter, doc_metadata: Optional[DocMetadata] = None) -> List[TextDoc]:
     parsed_texts: List[TextDoc] = []
 
     for file in files:
@@ -73,10 +74,33 @@ async def parse_files(files: List[UploadFile], splitter: Splitter) -> List[TextD
             saved_path = str(path.resolve())
             logger.info(f"saved file {file.filename} to {saved_path}")
 
+            # Compute content hash for deduplication tracking
+            with open(saved_path, "rb") as fh:
+                content_bytes = fh.read()
+            doc_hash = hashlib.sha256(content_bytes).hexdigest()
+            # Stable doc_id derived from filename so re-uploads map to the same registry entry
+            doc_id = hashlib.sha256(file.filename.encode()).hexdigest()[:16]
+
             metadata = {
                 'path': saved_path,
-                'timestamp': time.time()
+                'filename': file.filename,
+                'timestamp': time.time(),
+                'doc_id': doc_id,
+                'doc_hash': doc_hash,
             }
+
+            # Merge optional rich metadata supplied at ingestion time
+            if doc_metadata:
+                if doc_metadata.doc_title:
+                    metadata['doc_title'] = doc_metadata.doc_title
+                if doc_metadata.category:
+                    metadata['category'] = doc_metadata.category
+                if doc_metadata.version:
+                    metadata['version'] = doc_metadata.version
+                if doc_metadata.department:
+                    metadata['department'] = doc_metadata.department
+                if doc_metadata.source_url:
+                    metadata['source_url'] = doc_metadata.source_url
 
             chunks = splitter.split(saved_path)
             for chunk in chunks:
@@ -89,7 +113,7 @@ async def parse_files(files: List[UploadFile], splitter: Splitter) -> List[TextD
     return parsed_texts
 
 
-async def parse_links(links: List[str], splitter: Splitter) -> List[TextDoc]:
+async def parse_links(links: List[str], splitter: Splitter, doc_metadata: Optional[DocMetadata] = None) -> List[TextDoc]:
     parsed_texts: List[TextDoc] = []
 
     for link in links:
@@ -99,11 +123,30 @@ async def parse_links(links: List[str], splitter: Splitter) -> List[TextDoc]:
                 saved_path = str(path.resolve())
                 logger.info(f"saved link {link} to {saved_path}")
 
+                # Stable doc_id derived from URL
+                doc_id = hashlib.sha256(link.encode()).hexdigest()[:16]
+
                 metadata = {
                     'path': saved_path,
                     'url': link,
-                    'timestamp': time.time()
+                    'timestamp': time.time(),
+                    'doc_id': doc_id,
+                    'source_url': link,
                 }
+
+                # Merge optional rich metadata supplied at ingestion time
+                if doc_metadata:
+                    if doc_metadata.doc_title:
+                        metadata['doc_title'] = doc_metadata.doc_title
+                    if doc_metadata.category:
+                        metadata['category'] = doc_metadata.category
+                    if doc_metadata.version:
+                        metadata['version'] = doc_metadata.version
+                    if doc_metadata.department:
+                        metadata['department'] = doc_metadata.department
+                    # source_url from metadata overrides the crawled URL if explicitly provided
+                    if doc_metadata.source_url:
+                        metadata['source_url'] = doc_metadata.source_url
 
                 chunks = splitter.split(saved_path)
                 for chunk in chunks:

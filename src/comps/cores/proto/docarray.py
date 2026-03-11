@@ -71,9 +71,35 @@ class DataPrepFile(BaseDoc):
     data64: str
     filename: str
 
+
+class DocMetadata(BaseDoc):
+    """Optional rich metadata attached to a document at ingestion time.
+    Propagated into every TextDoc chunk so retrieval can filter by any field.
+    """
+    doc_title: Optional[str] = None
+    category: Optional[str] = None      # e.g. "API", "Tutorial", "Release Notes"
+    version: Optional[str] = None       # e.g. "2.3", "v1.0"
+    department: Optional[str] = None    # e.g. "Engineering", "HR"
+    source_url: Optional[str] = None    # canonical URL of the original document
+
+
 class DataPrepInput(BaseDoc):
     files: List[DataPrepFile] = []
     links: List[str] = []
+    doc_metadata: Optional[DocMetadata] = None  # optional per-ingestion metadata
+
+class SourceDoc(BaseDoc):
+    """A single source document reference attached to LLM responses.
+    Populated by the reranker and forwarded to the gateway for API response inclusion.
+    """
+    doc_id: Optional[str] = None
+    doc_title: Optional[str] = None
+    source_url: Optional[str] = None
+    chunk_text: Optional[str] = None
+    relevance_score: Optional[float] = None
+    category: Optional[str] = None
+    version: Optional[str] = None
+
 
 class SearchedDoc(BaseDoc):
     retrieved_docs: DocList[TextDoc]

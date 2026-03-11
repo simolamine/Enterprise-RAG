@@ -1,11 +1,11 @@
 # Copyright (C) 2024 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-from comps.cores.proto.docarray import TextDoc
+from comps.cores.proto.docarray import TextDoc, DocMetadata
 from comps.cores.mega.logger import get_opea_logger
 from comps.dataprep.utils.splitter import Splitter
 from comps.dataprep.utils.utils import parse_files, parse_links
-from typing import List
+from typing import List, Optional
 
 logger = get_opea_logger(f"{__file__.split('comps/')[1].split('/', 1)[0]}_microservice")
 
@@ -34,7 +34,7 @@ class OPEADataprep:
         self.process_table = process_table
         self.table_strategy = table_strategy
 
-    async def dataprep(self, files: any, link_list: list) -> List[TextDoc]:
+    async def dataprep(self, files: any, link_list: list, doc_metadata: Optional[DocMetadata] = None) -> List[TextDoc]:
 
         if not files and not link_list:
             raise ValueError("No links and/or files passed for data preparation.")
@@ -52,7 +52,8 @@ class OPEADataprep:
             try:
                 textdocs = await parse_files(
                     files=files,
-                    splitter=splitter
+                    splitter=splitter,
+                    doc_metadata=doc_metadata
                 )
                 text_docs.extend(textdocs)
             except Exception as e:
@@ -64,7 +65,8 @@ class OPEADataprep:
             try:
                 textdocs = await parse_links(
                     links=link_list,
-                    splitter=splitter
+                    splitter=splitter,
+                    doc_metadata=doc_metadata
                 )
                 text_docs.extend(textdocs)
             except Exception as e:
