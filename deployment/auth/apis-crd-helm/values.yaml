@@ -37,3 +37,36 @@ fingerprint:
     service_port: 6012
     backend_service: fingerprint-usvc
     service_path: /v1/system_fingerprint/change_arguments
+
+# Documentation Inquiry Chatbot — API routes
+docbot:
+  namespace: docbot
+  hostname: erag.com
+  query_api:
+    path: /api/v1/docbot
+    backend_service: router-service
+    service_port: 8080
+    service_path: /
+
+doc_registry:
+  namespace: docbot
+  hostname: erag.com
+  list_api:
+    path: /api/v1/doc_registry
+    backend_service: doc-registry-svc
+    service_port: 6200
+    service_path: /v1/doc_registry
+  delete_api:
+    path: /api/v1/doc_registry/*
+    backend_service: doc-registry-svc
+    service_port: 6200
+    service_path: /v1/doc_registry
+
+feedback:
+  namespace: docbot
+  hostname: erag.com
+  submit_api:
+    path: /api/v1/feedback
+    backend_service: doc-registry-svc
+    service_port: 6200
+    service_path: /v1/feedback

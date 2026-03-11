@@ -73,6 +73,10 @@ images:
     image: "opea/out-guard"
     repository: *repo
     tag: *tag
+  doc-registry-usvc:
+    image: "opea/doc-registry"
+    repository: *repo
+    tag: *tag
   ui-usvc:
     image: "opea/chatqna-conversation-ui"
     repository: *repo

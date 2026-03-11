@@ -1,0 +1,15 @@
+# Copyright (C) 2024 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+# Kubernetes Namespace definition for the Documentation Inquiry Chatbot.
+# Apply with: kubectl apply -f deployment/configs/docbot-namespace.yaml
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: docbot
+  labels:
+    app.kubernetes.io/name: docbot
+    app.kubernetes.io/component: documentation-chatbot
+    # Required for Istio sidecar injection (matches cluster Istio config)
+    istio-injection: enabled

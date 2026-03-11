@@ -1,0 +1,131 @@
+# Copyright (C) 2024 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+# Documentation Inquiry Chatbot — GMConnector pipeline for CPU (Xeon)
+#
+# Pipeline: Embedding → Retriever (docbot-index) → Reranking → LLM
+# Models:
+#   Embedding : BAAI/bge-large-en-v1.5   (TEI)
+#   Reranker  : BAAI/bge-reranker-large  (TEI)
+#   LLM       : mistralai/Mistral-7B-Instruct-v0.1 (TGI)
+# Knowledge base: Redis index "docbot-index" (isolated from chatqa index)
+
+apiVersion: gmc.opea.io/v1alpha3
+kind: GMConnector
+metadata:
+  labels:
+    app.kubernetes.io/name: gmconnector
+    app.kubernetes.io/managed-by: kustomize
+    gmc/platform: xeon
+  name: docbot
+  namespace: docbot
+spec:
+  routerConfig:
+    name: router
+    serviceName: router-service
+  nodes:
+    root:
+      routerType: Sequence
+      steps:
+
+      # ── Input Guardrail (optional – enable by uncommenting) ──────────────
+      # - name: InGuard
+      #   internalService:
+      #     serviceName: in-guard-svc
+      #     config:
+      #       endpoint: /v1/llmguardinput
+      #       PROMPT_INJECTION_ENABLED: "true"
+      #       BAN_TOPICS_ENABLED: "true"
+      #       TOKEN_LIMIT_ENABLED: "true"
+      #       TOKEN_LIMIT_LIMIT: "512"
+      #       SECRETS_ENABLED: "true"
+
+      # ── Stage 1: Embedding ───────────────────────────────────────────────
+      - name: Embedding
+        internalService:
+          serviceName: embedding-svc
+          config:
+            endpoint: /v1/embeddings
+            EMBEDDING_MODEL_SERVER_ENDPOINT: tei-embedding-svc
+            EMBEDDING_MODEL_NAME: "BAAI/bge-large-en-v1.5"
+            EMBEDDING_MODEL_SERVER: "tei"
+            EMBEDDING_CONNECTOR: "langchain"
+
+      - name: TeiEmbedding
+        internalService:
+          serviceName: tei-embedding-svc
+          isDownstreamService: true
+
+      # ── Stage 2: Retrieval from isolated docbot-index ────────────────────
+      - name: Retriever
+        data: $response
+        internalService:
+          serviceName: retriever-svc
+          config:
+            endpoint: /v1/retrieval
+            REDIS_URL: "redis://redis-vector-db.docbot.svc.cluster.local:6379"
+            REDIS_INDEX_NAME: "docbot-index"
+            EMBED_MODEL: "BAAI/bge-large-en-v1.5"
+            # Number of documents to retrieve before reranking
+            RETRIEVER_TOP_K: "10"
+
+      - name: VectorDB
+        internalService:
+          serviceName: redis-vector-db
+          isDownstreamService: true
+
+      # ── Stage 3: Reranking ───────────────────────────────────────────────
+      - name: Reranking
+        data: $response
+        internalService:
+          serviceName: reranking-svc
+          config:
+            endpoint: /v1/reranking
+            RERANKING_SERVICE_ENDPOINT: tei-reranking-svc
+            # Return top 5 documents to the LLM context
+            RERANKER_TOP_N: "5"
+
+      - name: TeiReranking
+        internalService:
+          serviceName: tei-reranking-svc
+          config:
+            endpoint: /rerank
+            RERANKING_MODEL_NAME: "BAAI/bge-reranker-large"
+          isDownstreamService: true
+
+      # ── Stage 4: LLM Generation ──────────────────────────────────────────
+      - name: Llm
+        data: $response
+        internalService:
+          serviceName: llm-svc
+          config:
+            endpoint: /v1/chat/completions
+            TGI_LLM_ENDPOINT: tgi-service-m
+            LLM_MODEL_SERVER_ENDPOINT: tgi-service-m
+            LLM_MODEL_SERVER: "tgi"
+            LLM_CONNECTOR: "langchain"
+            # Grounding parameters — keep temperature low for factual answers
+            LLM_MAX_NEW_TOKENS: "1024"
+            LLM_TEMPERATURE: "0.01"
+            LLM_TOP_P: "0.95"
+            LLM_TOP_K: "10"
+            # System prompt path for documentation-specific instructions
+            DOCBOT_SYSTEM_PROMPT_PATH: "/app/prompts/docbot_system_prompt.txt"
+
+      - name: Tgi
+        internalService:
+          serviceName: tgi-service-m
+          config:
+            endpoint: /generate
+            LLM_TGI_MODEL_NAME: "mistralai/Mistral-7B-Instruct-v0.1"
+          isDownstreamService: true
+
+      # ── Output Guardrail (optional – enable by uncommenting) ─────────────
+      # - name: OutGuard
+      #   data: $response
+      #   internalService:
+      #     serviceName: out-guard-svc
+      #     config:
+      #       endpoint: /v1/llmguardoutput
+      #       FACTUAL_CONSISTENCY_ENABLED: "true"
+      #       MALICIOUS_URLS_ENABLED: "true"
